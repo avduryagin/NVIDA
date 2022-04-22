@@ -170,3 +170,37 @@ def assignment(a=np.array([]), add=True):
         return np.array([c[:-1], np.arange(a.shape[0] - 1)]), v[0]
 
     return np.array([np.arange(a.shape[0] - 1), c[:-1]]), v[0]
+
+def interseption(C, D,shape=3):
+    if shape==3:
+        A = np.array(C)
+        X = np.array(D)
+    else:
+        A = np.array(C,dtype=float)
+        X = np.array(D,dtype=float)
+    a = A[0]
+    b = A[1]
+    x = X[0]
+    y = X[1]
+    mask1 = (a < x) & (x < b)
+    mask2 = (a < y) & (y < b)
+    mask3 = ((x <= a) & (a <= y)) & ((x <= b) & (b <= y))
+    # print(A)
+    # print(X)
+    if mask1 & mask2:
+        A[0] = x
+        A[1] = y
+        # print('returned ',A)
+        return A
+    if mask1:
+        A[0] = x
+        # print('returned ',A)
+        return A
+    if mask2:
+        A[1] = y
+        # print('returned ',A)
+        return A
+    if mask3:
+        # print('returned ',A)
+        return A.reshape(-1, shape)
+    return np.array([],dtype=float)

@@ -1433,12 +1433,14 @@ def get_quarter_range(quarter,year=2017):
     if quarter<1:
         return np.nan,np.nan
     quarter=int(quarter)
-    a=int(quarter/4)
+    a=int(quarter/5)
     b=np.fmod(quarter-1,4)
     c=np.array([1,2,3])
     #q=c[int(b)]-1
     year=year+a
     monthes=c+b*3
+    #print(monthes)
+    #print(year)
     start=get_month_range(monthes[0],year)[0]
     end=get_month_range(monthes[-1],year)[1]
     return start,end
