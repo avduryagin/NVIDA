@@ -355,6 +355,8 @@ class wells_schedule:
         return frame
 
     def isprohibited(self,x=0,well=0):
+        if np.isnan(x):
+            return False
         try:
 
             fun=self.debit_functions[well]
@@ -607,18 +609,19 @@ class wells_schedule:
 
         while k < self.stop:
             j = self.free[k]
+            func = self.debit_functions[j]
 
             a = self.ts[cw, j]
             x = a + self.ct[i]
 
+            if self.tracing:
+                x=self.set_bound(x,func)
 
             x=self.get_group_support(x,i)
-
             free_=self.isprohibited(x,j)
 
-
             if (self.ftmatrix[j,i])& free_:
-                func=self.debit_functions[j]
+
                 func.current_index=k
 
                 if next_well is not None:
@@ -706,8 +709,14 @@ class wells_schedule:
             j=self.groups[k]
             a = self.ts[j, cw]
             x = a + self.ct[k]
+            if self.tracing:
+                x=self.set_bound(x,func)
+            #if (cw==263)&(x>=181):
+                #print()
             x=self.get_group_support(x,k)
-            free_ = self.isprohibited(x, j)
+            free_ = self.isprohibited(x, cw)
+
+
 
             if self.ftmatrix[cw,k]&free_:
 
@@ -821,6 +830,17 @@ class wells_schedule:
             else:
                 return np.NINF
 
+    def set_bound(self,x=0.,fun=debit_function()):
+        teta=fun.supp[0]-x
+        if teta>=0:
+            return fun.supp[0]
+        else:
+            teta = x
+            if teta<=fun.supp[1]:
+                return teta
+            else:
+                return np.inf
+
     def f8(self,x=0.,fun=debit_function()):
         teta=fun.supp[1]-x
         if teta>=0:
@@ -911,11 +931,12 @@ class wells_schedule:
             value=self.f14(x,fun)
             return value
         else:
-            teta = -self.f7(x, fun=fun)
-            if np.isinf(teta):
+            #teta = self.set_bound(x, fun=fun)
+            #teta=x
+            if np.isinf(x):
                 return np.NINF
             cw = fun.current_index
-            t = teta + fun.tau
+            t = x + fun.tau
             n=self.free.shape[0]-1
             if n>0:
                 return -(t+self.logistic_values[cw]/n)
@@ -1117,6 +1138,8 @@ class wells_schedule:
             index_w = np.zeros(index.shape[0], dtype=int)
             for i,w in enumerate(index):
                 j=self.nempty[i]
+                #if w==263:
+                    #print()
                 st=self.ct[j] + self.ts[self.groups[j], w]+self.dt[j]
                 self.st[j] =self.get_group_support(st,j)
                 #self.st[j] = self.ct[j] + self.ts[self.groups[j], w]+self.dt[j]
@@ -1234,6 +1257,9 @@ class wells_schedule:
 
             index_w = np.zeros(index.shape[0], dtype=int)
             for i,w in enumerate(index):
+
+                #if (w==263):
+                    #print()
 
                 j=self.nempty[i]
                 point=self.ct[j]+self.ts[self.groups[j],w]
@@ -1704,6 +1730,7 @@ def set_loc_index(index=np.array([]), R=np.array([]), T=np.array([]), D=np.array
 #wsch.tracing=True
 #stop=otm_Q0.shape[0]
 #wsch.fun=wsch.f14
+#wsch.fit(otm_distances,otm_tr,otm_Q0,otm_Q1,otm_group,support=otm_support,tracing=True,stop=stop,epsilon=np.inf,service=service, equipment=equipment,wells_service=otm_service,prohibits=prohibits,group_support=otm_group_support)
 #wsch.fit(otm_distances,otm_tr,otm_Q0,otm_Q1,otm_group,support=otm_support,stop=stop,epsilon=np.inf,service=service, equipment=equipment,wells_service=otm_service,prohibits=prohibits,group_support=otm_group_support)
 #wsch.update_debit_functions(expanded)
 #mask=np.isin(wsch.free,wsch.supported)
@@ -1711,6 +1738,7 @@ def set_loc_index(index=np.array([]), R=np.array([]), T=np.array([]), D=np.array
 #t1=wsch.get_group_support(0.2,1)
 #t2=wsch.get_group_support(0.8,1)
 #trace=wsch.get_routes_v1(tracing=True)
+#trace=wsch.get_routes()
 #R,T,D,O=get_rout_time(trace)
 #print('not used '+str(wsch.free.shape[0]))
 #otm_service=np.load(subpath+'otm_service.npy',allow_pickle=True)
