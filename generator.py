@@ -121,7 +121,6 @@ class Generator:
         # 17'wmean', 18'amean', 19'percent', 20'tau', 21'interval', 22'water', 23'length']
         # t-предыстория
         # tau -новые значения
-        #added a comment
         y = x.copy()
         y[:, self.col['tau']] = tau
         q = []
