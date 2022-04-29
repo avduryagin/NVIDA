@@ -4049,9 +4049,9 @@ def get_easy_binary(xdata, ident='new_id', expand=False, ints=[100], date=[1], s
                    columns=['Наработка до отказа(new), лет', 'Адрес от начала участка (new)',
                             'Обводненность', 'getout','L,м', 'S','new_id','Дата аварии','index','to_out']):
     def get_identity(data, date=1, a=0, b=1,index=-1,interval=100,steps=15,epsilon=1/12.):
-        types=dict(names=['new_id','index','period','shape', 'Дата аварии', 'L,м', 'a', 'b', 'target', 'count','next','delta_next',
+        types=dict(names=['new_id','index','period','shape', 'Дата аварии', 'L,м', 'a', 'b', 'target', 'count','next','delta_next','delta',
                                      'ads','ads05','ads1','ads2','ads3','ivl0','ivl1','ivl2','ivl3','ivl4','ivl5','nivl0','nivl1','nivl2','nivl3','nivl4','nivl5','wmean','amean','percent','tau','interval','water','x','s','to_out'],
-                              formats=['U25',np.int32,np.int8,np.int32, 'datetime64[s]', np.float, np.float, np.float, np.float,
+                              formats=['U25',np.int32,np.int8,np.int32, 'datetime64[s]', np.float, np.float, np.float, np.float, np.float,
                                        np.float,np.float, np.float, np.float, np.float, np.float,np.float,np.float,np.float,np.float,np.float,np.float,
                                        np.float,np.float,np.float,np.float,np.float,np.float,np.float,np.float,np.float,np.float,np.float,np.float,np.float,np.float,np.float,np.float,np.float])
         columns = np.arange(steps)
@@ -4090,7 +4090,17 @@ def get_easy_binary(xdata, ident='new_id', expand=False, ints=[100], date=[1], s
         identity['shape'] = mask[mask==True].shape[0]
         mask1=(data[:,1]>=a)&(data[:,1]<=b)
         xmask=mask1&mask
-        identity['ads']=xmask[xmask==True].shape[0]
+        ads=xmask[xmask==True].shape[0]
+        dt=np.nan
+        prev=0
+        if ads>1:
+            prev=data[xmask, 0][-2]
+
+        dt = tau - prev
+        identity['delta'] = dt
+        identity['ads']=ads
+
+
         sparsed=sparse(data[:,0][xmask],epsilon=epsilon)[-steps:]
         for t in np.arange(1,steps+1):
             if -t>=-sparsed.shape[0]:
@@ -4127,6 +4137,7 @@ def get_easy_binary(xdata, ident='new_id', expand=False, ints=[100], date=[1], s
         target=np.nan
         next=np.nan
         delta=np.nan
+
         identity['next']=next
         identity['delta_next']=delta
         dic={0:8./12.,1:7./12.,2:5./12.,3:4./12.,4:3./12.,5:3./12,6:2./12.,7:2./12.,}
@@ -6583,6 +6594,27 @@ def get_merged_repairs(true, synthetic, epsilon=0.5):
     df['Длина'] = df['b'] - df['Адрес']
     df = df[columns]
     df.sort_values(by='Дата ремонта', inplace=True)
+    return df
+
+
+def get_merged_features(data=pd.DataFrame([]),by='merge',group_id='new_id',size=1):
+    mask=data[by]<0
+    free=data[mask]
+    clusters=data[~mask]
+    agg=clusters.groupby(group_id)
+    spared=[]
+    for group in agg:
+        aggc=group[1].groupby('merge')
+        for cluster in aggc:
+            shape=cluster[1].shape[0]
+            n=size
+            if shape<size:
+                n=shape
+            row=cluster[1].values[:n]
+            spared.append(row)
+    spared=np.vstack(spared)
+    clustered=pd.DataFrame(spared,columns=data.columns)
+    df=free.append(clustered,ignore_index=True)
     return df
 
 
