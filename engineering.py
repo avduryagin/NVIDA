@@ -15,7 +15,7 @@ def get_repairs_map(REP, k):
         Y = sm.get_sets_residual(L, X)
         return Y
 
-def get_unical_repairs(data, dfield='repair_date',lfield='repair_lenght',afield='repair_adress', scale=0,values=False):
+def get_unical_repairs(data, dfield='repair_date',lfield='repair_lenght',afield='repair_address', scale=0,values=False):
     group = data[dfield].value_counts().keys()
     repairs = set()
 
@@ -60,8 +60,7 @@ def get_raw_repairs(data, scale=0,values=False):
                     repair = (rep, place, length)
                     repairs.add(repair)
 
-    repairs = pd.DataFrame(list(repairs), columns=['Дата ремонта', 'Адрес', 'Длина']).sort_values(
-        by='Дата ремонта').reset_index(drop=True)
+    repairs = pd.DataFrame(list(repairs), columns=['Дата ремонта', 'Адрес', 'Длина']).sort_values(by='Дата ремонта').reset_index(drop=True)
     repairs['Дата ремонта'] = pd.to_datetime(repairs['Дата ремонта'])
     if values:
         repairs['b'] = repairs['Адрес'] + repairs['Длина']
@@ -113,8 +112,9 @@ def get_merged_repairs(true, synthetic, epsilon=0.5):
     df.sort_values(by='Дата ремонта', inplace=True)
     return df
 
-def get_splited_by_repairs(data, ID,delta=3):
-    group = data[data['ID простого участка'] == ID]
+def get_splited_by_repairs(data, index=np.array([],dtype=np.int32),ID='',delta=3):
+    #group = data[data['ID простого участка'] == ID]
+    group=data.loc[index]
     synthetic = get_unical_repairs(group)
     true=get_raw_repairs(group)
     repairs=get_merged_repairs(true,synthetic,epsilon=0.5)
@@ -130,11 +130,11 @@ def get_splited_by_repairs(data, ID,delta=3):
                     (group['Адрес от начала участка'] <= b) & (group['Адрес от начала участка'] >= a))
         mask1 = (group['Дата аварии'] > rd) & (
                     (group['Адрес от начала участка'] <= b) & (group['Адрес от начала участка'] >= a))
-        indexes = mask1[mask1 == True].keys()
+        indices = mask1[mask1 == True].keys()
         #data.loc[indexes, 'Дата ввода'] = rd
-        data.loc[indexes, 'a'] = a
-        data.loc[indexes, 'b'] = b
-        data.loc[indexes, 'new_id'] = str(ID) + '_' + str(i + 1)
+        data.loc[indices, 'a'] = a
+        data.loc[indices, 'b'] = b
+        data.loc[indices, 'new_id'] = str(ID) + '_' + str(i + 1)
         data.loc[mask[mask == True].keys(), 'Дата перевода в бездействие'] = rd
         data.loc[mask[mask == True].keys(), 'Состояние'] = 'Бездействующий'
         repgroup = group[mask]
@@ -145,13 +145,13 @@ def get_splited_by_repairs(data, ID,delta=3):
                 submask = (repgroup['Дата аварии'] >= t[2]) & ((repgroup['Адрес от начала участка'] <= t[1]) & (
                             repgroup['Адрес от начала участка'] >= t[0]))
                 mask = mask | submask
-                indexes1 = submask[submask == True].keys()
+                indices1 = submask[submask == True].keys()
                 dlt=(rd-t[2])/np.timedelta64(1,'Y')
                 #print(dlt)
                 if dlt>=delta:
-                    data.loc[indexes1, 'Дата ввода'] = t[2]
-                data.loc[indexes1, 'Дата перевода в бездействие'] = rd
-                data.loc[indexes1, 'Состояние'] = 'Бездействующий'
+                    data.loc[indices1, 'Дата ввода'] = t[2]
+                data.loc[indices1, 'Дата перевода в бездействие'] = rd
+                data.loc[indices1, 'Состояние'] = 'Бездействующий'
 
         #subgroup = repgroup[mask]
         group = group[~mask]
@@ -159,24 +159,71 @@ def get_splited_by_repairs(data, ID,delta=3):
     group.loc[le,'Дата перевода в бездействие']=np.nan
     empty = np.isnan(group['Дата перевода в бездействие'])
     submask = ((group['Состояние'] == 'Бездействующий') | (group['Состояние'] == 'Демонтирован'))&empty
-    indexes1 = submask[submask == True].keys()
+    indices1 = submask[submask == True].keys()
     rd = group[submask]['Дата аварии'].max()
-    data.loc[indexes1, 'Дата перевода в бездействие'] = rd
+    data.loc[indices1, 'Дата перевода в бездействие'] = rd
     if repairs.shape[0]>0:
         A = get_repairs_map(rep, rep.shape[0] - 1)
         for t in A:
             submask = (group['Дата аварии'] >t[2]) & ((group['Адрес от начала участка'] <= t[1]) & (
                 group['Адрес от начала участка'] >= t[0])&((group['Состояние']=='Бездействующий')|(group['Состояние']=='Демонтирован')))
-            indexes1 = submask[submask == True].keys()
+            indices1 = submask[submask == True].keys()
             rd=group[submask]['Дата аварии'].max()
             dlt = (rd - t[2]) / np.timedelta64(1, 'Y')
             if dlt >= delta:
-               data.loc[indexes1, 'Дата ввода'] = t[2]
-            data.loc[indexes1, 'Дата перевода в бездействие'] = rd
+               data.loc[indices1, 'Дата ввода'] = t[2]
+            data.loc[indices1, 'Дата перевода в бездействие'] = rd
             #data.loc[indexes1, 'Состояние'] = 'Бездействующий'
     return data
 
-def set_repairs_by_clustering(data, delta=1):
+def inscribing(data,*args,**kwargs):
+    #отбрасываем записи с пустой координатой или датой аварии
+
+    data['repair_date'] = np.nan
+    data['repair_lenght'] = np.nan
+    data['repair_address'] = np.nan
+    data['repair_index'] = np.nan
+    data['comment'] = np.nan
+    data['cluster']=np.nan
+    columns=dict({'date':'Дата аварии','x':'Адрес от начала участка',
+                  'L':'L','age':'Наработка до отказа','water':'Обводненность',
+                  'cluster':{'epsilon':0.1,'r':0.5,'length':3000},
+                  'repairs':{'delta':1},'split':{'delta':3}})
+    for arg in args:
+        data[arg]=np.nan
+
+    #try:
+
+
+
+
+
+    mask=data[afield].isnull()|data[xfield].isnull()
+    data=data[~mask]
+    data['a']=0
+    data['b']=data[lfield]
+    #by=kwargs['by']
+    by=taufield
+    data['new_id'] = data[by].astype('str')
+    grouped = data.groupby(by).groups
+    for group in grouped:
+        index=grouped[group]
+        length_approach(data,index,yfield=xfield,xfield=lfield)
+        wtp_approach(data,index,xfield=taufield,yfield=wfield)
+        set_clusters(data,index,)
+        set_repairs_by_clustering(data,index)
+        get_splited_by_repairs(data,index,group)
+    data['L,м']=data['b']-data['a']
+    data['Адрес от начала участка (new)']=data['Адрес от начала участка']-data['a']
+    data['Наработка до отказа(new), лет']=(data['Дата аварии']-data['Дата ввода'])/np.timedelta64(1,'Y')
+
+
+
+
+
+    return data
+
+def set_repairs_by_clustering(data=pd.DataFrame([]),index=np.array([],dtype=np.int32), delta=1):
 
     def get_cluster_shape(cluster):
         xmin = cluster['Адрес от начала участка'].min()
@@ -194,76 +241,66 @@ def set_repairs_by_clustering(data, delta=1):
         interseptions = data[mask]['cluster'].value_counts().keys()
         return interseptions
 
-    data['repair_date'] = np.nan
-    data['repair_lenght'] = np.nan
-    data['repair_adress'] = np.nan
-    data['repair_index'] = np.nan
-    data['comment'] = np.nan
-    agg_data = data.groupby('ID простого участка')
-    for group in agg_data:
-        #ID = group[0]
-        pipe = group[1]
-        mask = pipe['cluster'] == -1
-        alones = pipe[mask]
-        tilde = 0
-        for c in pipe[~mask]['cluster'].value_counts().keys():
-            cluster = pipe[pipe['cluster'] == c]
-            x, y, d = get_cluster_shape(cluster)
-            rd = d[1]
-            rl = x[1] - x[0]
-            if rl < 2:
-                rl = 2
-            addr = x[0]
-            interseption = get_cluster_interseption(cluster, pipe[~mask])
+    pipe=data.loc[index]
+    mask = pipe['cluster'] == -1
+    alones = pipe[mask]
+    tilde = 0
+    for c in pipe[~mask]['cluster'].value_counts().keys():
+        cluster = pipe[pipe['cluster'] == c]
+        x, y, d = get_cluster_shape(cluster)
+        rd = d[1]
+        rl = x[1] - x[0]
+        if rl < 2:
+            rl = 2
+        addr = x[0]
+        interseption = get_cluster_interseption(cluster, pipe[~mask])
+        comment = 0
+        if len(interseption) > 0:
+            for i in interseption:
+                top = pipe[pipe['cluster'] == i]
+                q, p, w = get_cluster_shape(top)
+                if p[0] - y[1] <= delta:
+                    comment = 1
+                    break
+        else:
             comment = 0
-            if len(interseption) > 0:
-                for i in interseption:
-                    top = pipe[pipe['cluster'] == i]
-                    q, p, w = get_cluster_shape(top)
-                    if p[0] - y[1] <= delta:
-                        comment = 1
-                        break
-            else:
-                comment = 0
-            alone = alones[(
-                        (alones["Адрес от начала участка"] >= x[0]) & (alones["Адрес от начала участка"] <= x[1]) & (
-                            alones["Наработка до отказа"] < y[0]))]
-            data.loc[cluster.index, ['repair_date', 'repair_adress', 'repair_lenght', 'comment', 'repair_index']] = [rd,addr,rl,comment,tilde]
+        alone = alones[(
+                (alones["Адрес от начала участка"] >= x[0]) & (alones["Адрес от начала участка"] <= x[1]) & (
+                alones["Наработка до отказа"] < y[0]))]
+        data.loc[cluster.index, ['repair_date', 'repair_adress', 'repair_lenght', 'comment', 'repair_index']] = [rd,addr,rl,comment,tilde]
+        if alone.shape[0] > 0:
+            data.loc[alone.index, ['repair_date', 'repair_adress', 'repair_lenght', 'comment', 'repair_index']] = [rd,addr,rl,comment,tilde]
 
-            if alone.shape[0] > 0:
-                data.loc[alone.index, ['repair_date', 'repair_adress', 'repair_lenght', 'comment', 'repair_index']] = [rd, addr, rl, comment, tilde]
-
-            tilde = tilde + 1
-
+        tilde = tilde + 1
     return data
 
-def set_clusters(data=pd.DataFrame([]),epsilon=0.1,r=0.5,length=3000,by="ID простого участка",top_age=30):
-    data['cluster']=np.nan
-    scaler=MinMaxScaler()
+def set_clusters(data=pd.DataFrame([]),index=np.array([],dtype=np.int32),epsilon=0.1,r=0.5,length=3000,by="ID простого участка",top_age=30,scaler=MinMaxScaler()):
+    #data['cluster']=np.nan
+    scaler=scaler
     w=np.array([1,1],dtype=np.float32)
-    aggdata=data.groupby(by)
-    for groups in aggdata:
-        group=groups[1]
-        L=group.iloc[0]['L']
-        values=group[['Адрес от начала участка','Наработка до отказа']].values
-        if L<length:
-            L=length
-        add=np.array([length,top_age])
-        values=np.vstack((values,add))
-        scaler.fit(values)
-        tr=scaler.transform(group[['Адрес от начала участка','Наработка до отказа']].values)
-        Epsilon=r/scaler.data_range_[1]
-        w[1]=(epsilon/Epsilon)**2
-        metric=metrics.metrics(w)
-        try:
-            scan=DBSCAN(min_samples=2,eps=epsilon,metric=metric.euclidian).fit(tr)
-            data.loc[group.index,'cluster']=scan.labels_
-        except(ValueError):
-            data.loc[group.index,'cluster']='error'
+    group = data.loc[index]
+    L = group.iloc[0]['L']
+    values = group[['Адрес от начала участка', 'Наработка до отказа']].values
+    if L < length:
+        L = length
+    add = np.array([length, top_age])
+    values = np.vstack((values, add))
+    scaler.fit(values)
+    tr = scaler.transform(values)
+    Epsilon = r / scaler.data_range_[1]
+    w[1] = (epsilon / Epsilon) ** 2
+    metric = metrics.metrics(w)
+    try:
+        scan = DBSCAN(min_samples=2, eps=epsilon, metric=metric.euclidian).fit(tr)
+        data.loc[group.index, 'cluster'] = scan.labels_
+    except(ValueError):
+        data.loc[group.index, 'cluster'] = 'error'
 
-def wtp_approach(data, mask, xfield='Наработка до отказа', yfield='Обводненность'):
+
+def wtp_approach(data=pd.DataFrame([]), index=np.array([],dtype=np.int32), xfield='Наработка до отказа', yfield='Обводненность'):
     #mask - бинарная маска "Обводненность"==0 & "ID простого участка" ==ID
     #data отсортирован по xfield
+    mask=data.loc[index,yfield]==0
     if (mask[mask == True].shape[0] == 0) | (mask[mask == True].shape[0] == mask.shape[0]):
         return
     i = 0
@@ -300,10 +337,16 @@ def wtp_approach(data, mask, xfield='Наработка до отказа', yfie
                     data.loc[indices, yfield] = data.loc[b, yfield]
         i = i + 1
 
-def length_approach(data, xfield='L',yfield='Адрес от начала участка',ident='ID простого участка'):
+def length_approach_v1(data, xfield='L',yfield='Адрес от начала участка',ident='ID простого участка'):
     gby=data.groupby(ident)
     for i,group in enumerate(gby):
         L=group[1][xfield].iloc[0]
         amax=group[1][yfield].max()
         if amax>L:
             data.loc[group[1].index,xfield]=amax
+
+def length_approach(data=pd.DataFrame([]), index=np.array([],dtype=np.int32),xfield='L',yfield='Адрес от начала участка'):
+    L=data.loc[index,xfield].iloc[0]
+    amax=data.loc[index,yfield].max()
+    if amax>L:
+        data.loc[index,xfield]=amax
