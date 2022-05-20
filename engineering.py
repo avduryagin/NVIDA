@@ -5,6 +5,31 @@ from sklearn.cluster import DBSCAN
 from sklearn.preprocessing import MinMaxScaler
 import metrics
 
+class repairs_map:
+    def __init__(self):
+        self.rmap=dict([])
+        self.shape=0
+        self.rep=np.array([])
+    def fit(self,rep=np.array([])):
+        self.rep=rep
+        self.shape=rep.shape[0]
+        if self.shape>0:
+            self.get_repairs_map(self.shape-1)
+
+    def get_repairs_map(self,k=0):
+        if k == 0:
+            X = self.rep[k, :].reshape(-1, 3)
+            self.rmap.update({k: X})
+            return X
+        else:
+            X = self.rep[k, :].reshape(3)
+            L = self.get_repairs_map(k - 1)
+            Y = sm.get_sets_residual(L, X)
+            self.rmap.update({k:Y})
+            return Y
+
+
+
 def get_repairs_map(REP, k):
     if k == 0:
         X = REP[k, :].reshape(-1, 3)
@@ -14,6 +39,7 @@ def get_repairs_map(REP, k):
         L = get_repairs_map(REP, k - 1)
         Y = sm.get_sets_residual(L, X)
         return Y
+
 
 def get_unical_repairs(data, dfield='repair_date',lfield='repair_length',afield='repair_address', scale=0,values=False):
     group = data[dfield].value_counts().keys()
@@ -37,7 +63,7 @@ def get_unical_repairs(data, dfield='repair_date',lfield='repair_length',afield=
         return values
     return repairs
 
-def get_raw_repairs(data, scale=0,values=False, rdfield='Дата окончания ремонта',
+def get_raw_repairs_v1(data, scale=0,values=False, rdfield='Дата окончания ремонта',
                rxfield='Адрес от начала участка_1',rlfield='Длина ремонтируемого участка',
                bdfield='Дата ремонта до аварии',bxfield='Адрес ремонта до аварии',blfield='Длина ремонта до аварии'):
     group1 = data[rdfield].value_counts().keys()
@@ -70,10 +96,70 @@ def get_raw_repairs(data, scale=0,values=False, rdfield='Дата окончан
         return values
     return repairs
 
-def get_merged_repairs(true, synthetic, epsilon=0.5):
+def get_raw_repairs(data, scale=0,values=False, rdfield='Дата окончания ремонта',
+               rxfield='Адрес от начала участка_1',rlfield='Длина ремонтируемого участка',
+               bdfield='Дата ремонта до аварии',bxfield='Адрес ремонта до аварии',blfield='Длина ремонта до аварии'):
+    #group1 = data[rdfield].value_counts().keys()
+    #group2 = data[bdfield].value_counts().keys()
+    group=np.vstack((data[[rdfield,rxfield,rlfield]].values,data[[bdfield,bxfield,blfield]].values))
+    mask=np.isnan(group[:,1].astype(np.float32))
+    group=group[~mask]
+    unique=np.unique(group[:,0])
+    mask=np.ones(shape=group.shape[0],dtype=bool)
+    repairs=[]
+
+    for u in unique:
+        index=np.where(group[mask,0]==u)[0]
+        unique_place=np.unique(group[index,1])
+        for up in unique_place:
+            pindex=np.where(group[index,1]==up)[0]
+            pindex_=index[pindex]
+            unique_length=np.unique(group[pindex_,2])
+            for ul in unique_length:
+                lindex=np.where(group[pindex_,2]==ul)[0]
+                lindex_=pindex_[lindex]
+                #mask[lindex_]=False
+                if ul>scale:
+                    ub=up+ul
+                    repair=(up,ub,u,ul)
+                    repairs.append(repair)
+
+
+
+    if values:
+        #types = dict(
+            #names=['a', 'b','date'],
+            #formats=[ np.float, np.float,'datetime64[s]'])
+        #dtype = np.dtype(types)
+        #dtype = [('a', float), ('b', float), ('date', np.datetime64)]
+        if len(repairs)>0:
+            repairs=[x[:3] for x in repairs]
+        #result=np.empty(shape=(len(repairs),3),dtype=dtype)
+        #result.fill(repairs)
+
+        result = np.array(repairs).reshape(-1,3)
+
+        #result = np.array(repairs, dtype=[ ('date', 'np.datetime64[s]'),('a', float), ('l', float)])
+        #repairs['b'] = repairs['Адрес'] + repairs['Длина']
+        #values = repairs[['Адрес', 'b', 'Дата ремонта']].values
+        return result
+    else:
+        repairs = pd.DataFrame(repairs, columns=['Адрес', 'b','Дата ремонта', 'Длина']).sort_values(
+            by='Дата ремонта').reset_index(drop=True)
+        repairs['Дата ремонта'] = pd.to_datetime(repairs['Дата ремонта'])
+
+    return repairs[['Дата ремонта', 'Адрес', 'Длина']]
+
+def get_merged_repairs(true, synthetic, epsilon=0.5,values=False):
 
     def split_repairs(true, synthetic, epsilon=0.5):
-        result = np.array([], dtype=[('a', float), ('b', float), ('date', np.datetime64)]).reshape(-1, 3)
+        #types = dict(
+            #names=['a', 'b','date'],
+            #formats=[ np.float, np.float,'datetime64[s]'])
+        #dtype = np.dtype(types)
+        #result=np.array([],dtype=dtype).reshape(-1,3)
+        result = np.array([]).reshape(-1, 3)
+        #result = np.array([], dtype=[('a', np.float32), ('b', np.float32), ('date', np.datetime64)]).reshape(-1, 3)
         if true.shape[0] == 0:
             return synthetic
         for synt in synthetic:
@@ -94,25 +180,42 @@ def get_merged_repairs(true, synthetic, epsilon=0.5):
         return result
 
     def merge_repairs(true, synthetic, epsilon=0.5):
-        result = np.array([], dtype=[('a', float), ('b', float), ('date', np.datetime64)]).reshape(-1, 3)
+        #types = dict(
+            #names=['a', 'b','date'],
+            #formats=[ np.float, np.float,'datetime64[s]'])
+        #dtype = np.dtype(types)
+        #result=np.array([],dtype=dtype).reshape(-1,3)
+        #result = np.array([], dtype=[('a', float), ('b', float), ('date', np.datetime64)]).reshape(-1, 3)
+        result = np.array([]).reshape(-1, 3)
         for s in synthetic:
             #print(s)
             res = split_repairs(true, s.reshape(-1, 3), epsilon=epsilon)
             #print(res)
             result = np.vstack((result, res))
         return result
-    columns = true.columns
-    true['b'] = true['Адрес'] + true['Длина']
-    synthetic['b'] = synthetic['Адрес'] + synthetic['Длина']
-    true_reps = true[['Адрес', 'b', 'Дата ремонта']].values
-    synt_reps = synthetic[['Адрес', 'b', 'Дата ремонта']].values
-    merged = merge_repairs(true_reps, synt_reps, epsilon=epsilon)
-    merged = np.vstack((merged, true_reps))
-    df = pd.DataFrame(merged, columns=['Адрес', 'b', 'Дата ремонта'])
-    df['Длина'] = df['b'] - df['Адрес']
-    df = df[columns]
-    df.sort_values(by='Дата ремонта', inplace=True)
-    return df
+    if values:
+        merged = merge_repairs(true, synthetic, epsilon=epsilon)
+        merged = np.vstack((merged, true))
+
+        sargs=np.argsort(merged[:,2])
+        return merged[sargs]
+
+    else:
+        columns = true.columns
+        true['b'] = true['Адрес'] + true['Длина']
+        synthetic['b'] = synthetic['Адрес'] + synthetic['Длина']
+        true_reps = true[['Адрес', 'b', 'Дата ремонта']].values
+        synt_reps = synthetic[['Адрес', 'b', 'Дата ремонта']].values
+        merged = merge_repairs(true_reps, synt_reps, epsilon=epsilon)
+        merged = np.vstack((merged, true_reps))
+        df = pd.DataFrame(merged, columns=['Адрес', 'b', 'Дата ремонта'])
+        df['Длина'] = df['b'] - df['Адрес']
+        df = df[columns]
+        df.sort_values(by='Дата ремонта', inplace=True)
+        return df
+
+
+
 
 def get_splited_by_repairs(data, index=np.array([],dtype=np.int32),ID='',delta=3,xfield ='Адрес от начала участка',dfield='Дата аварии',
               efield='Дата ввода',stfield='Состояние',outfield='Дата перевода в бездействие',rdfield='Дата окончания ремонта',
@@ -120,31 +223,35 @@ def get_splited_by_repairs(data, index=np.array([],dtype=np.int32),ID='',delta=3
                bdfield='Дата ремонта до аварии',bxfield='Адрес ремонта до аварии',blfield='Длина ремонта до аварии'):
     #group = data[data['ID простого участка'] == ID]
     group=data.loc[index]
-    synthetic = get_unical_repairs(group)
-    true=get_raw_repairs(group,rdfield=rdfield,rxfield=rxfield,rlfield=rlfield,bdfield=bdfield,bxfield=bxfield,blfield=blfield)
-    repairs=get_merged_repairs(true,synthetic,epsilon=0.5)
-    repairs['b'] = repairs['Адрес'] + repairs['Длина']
-    rep = repairs[['Адрес', 'b', 'Дата ремонта']].values
+    synthetic = get_unical_repairs(group,values=True)
+    true=get_raw_repairs(group,values=True,rdfield=rdfield,rxfield=rxfield,rlfield=rlfield,bdfield=bdfield,bxfield=bxfield,blfield=blfield)
+    rep=get_merged_repairs(true,synthetic,epsilon=0.5,values=True)
+    #repairs['b'] = repairs['Адрес'] + repairs['Длина']
+    #rep = repairs[['Адрес', 'b', 'Дата ремонта']].values
+    rmap=repairs_map()
+    rmap.fit(rep)
     # group['state']=True
     for i in np.arange(rep.shape[0]):
-        X = rep[i, :]
-        a = rep[i, 0]
-        b = rep[i, 1]
-        rd = rep[i, 2]
+        X = rep[i]
+        a = rep[i][0]
+        b = rep[i][1]
+        rd = rep[i][2]
         mask = (group[dfield] <= rd) & (
                     (group[xfield] <= b) & (group[xfield] >= a))
         mask1 = (group[dfield] > rd) & (
                     (group[xfield] <= b) & (group[xfield] >= a))
-        indices = mask1[mask1 == True].keys()
+        indices = mask1[mask1 == True].index
         #data.loc[indexes, 'Дата ввода'] = rd
         data.loc[indices, 'a'] = a
         data.loc[indices, 'b'] = b
         data.loc[indices, 'new_id'] = str(ID) + '_' + str(i + 1)
-        data.loc[mask[mask == True].keys(), outfield] = rd
-        data.loc[mask[mask == True].keys(), stfield] = 'Бездействующий'
+        labels=mask[mask == True].index
+        data.loc[labels, outfield] = rd
+        data.loc[labels, stfield] = 'Бездействующий'
         repgroup = group[mask]
         if i > 0:
-            A = get_repairs_map(rep, i - 1)
+            A=rmap.rmap[i - 1]
+            #A = get_repairs_map(rep, i - 1)
             T = sm.get_sets_residual(A, X.reshape(3), f=sm.interseption)[:-1]
             for t in T:
                 submask = (repgroup[dfield] >= t[2]) & ((repgroup[xfield] <= t[1]) & (
@@ -159,7 +266,10 @@ def get_splited_by_repairs(data, index=np.array([],dtype=np.int32),ID='',delta=3
                 data.loc[indices1, stfield] = 'Бездействующий'
 
         #subgroup = repgroup[mask]
-        group = group[~mask]
+        #drop=mask[mask == False].index
+        #group=group[~mask]
+
+        group.drop(labels,axis=0,inplace=True)
     le = group[outfield] < group[dfield]
     group.loc[le,outfield]=np.nan
     empty = np.isnan(group[outfield])
@@ -167,8 +277,9 @@ def get_splited_by_repairs(data, index=np.array([],dtype=np.int32),ID='',delta=3
     indices1 = submask[submask == True].keys()
     rd = group[submask][dfield].max()
     data.loc[indices1, outfield] = rd
-    if repairs.shape[0]>0:
-        A = get_repairs_map(rep, rep.shape[0] - 1)
+    if rep.shape[0]>0:
+        A = rmap.rmap[rep.shape[0] - 1]
+        #A = get_repairs_map(rep, rep.shape[0] - 1)
         for t in A:
             submask = (group[dfield] >t[2]) & ((group[xfield] <= t[1]) & (
                 group[xfield] >= t[0])&((group[stfield]=='Бездействующий')|(group[stfield]=='Демонтирован')))
