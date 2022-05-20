@@ -244,6 +244,7 @@ def inscribing(data,*args,afield ='Наработка до отказа',xfield 
     mask=data[afield].isnull()|data[xfield].isnull()
     drop=mask[mask==True].index
     data.drop(drop,inplace=True)
+    data.sort_values(by=afield,inplace=True)
     #data=data[~mask]
     # заполняем пропущенные значения обводненности, исправляем отрицательние или больше 100
     fill_wtp(data)
@@ -326,11 +327,11 @@ def set_clusters(data=pd.DataFrame([]),index=np.array([],dtype=np.int32),epsilon
     group = data.loc[index]
     L = group.iloc[0][lfield]
     values = group[[xfield, afield]].values
-    values_=values
-    if L < length:
-        L = length
-        add = np.array([length, top_age])
-        values_ = np.vstack((values, add))
+    #values_=values
+    #if L < length:
+        #L = length
+    add = np.array([length, top_age])
+    values_ = np.vstack((values, add))
     scaler.fit(values_)
     tr = scaler.transform(values)
     Epsilon = r / scaler.data_range_[1]
