@@ -142,3 +142,17 @@ class linear_transform:
 
     def value(self, x):
         return self.a1 + self.a2 * x
+
+def mean_approach(*args,**kwargs):
+    k=0
+    s=0.
+    for a in args:
+        #if ~np.isnan(a):
+        s+=a
+        k+=1
+    if k>0:
+        s=s/k
+
+    def value(x=0):
+        return s
+    return value

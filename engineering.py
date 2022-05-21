@@ -487,10 +487,16 @@ def wtp_approach(data=pd.DataFrame([]), index=np.array([],dtype=np.int32), xfiel
                 x2 = data.loc[b, xfield]
                 x=np.array([x1,x2])
                 y=np.array([q,p])
-                line = sm.linear_transform(x=x, y=y)
+                delta=abs(x2-x1)
+
+
                 if q > 0:
-                    # data.loc[indices,'Обводненность']=data.loc[[a,b],'Обводненность'].mean()
-                    data.loc[indices, yfield] = data.loc[indices, xfield].apply(lambda x: line.value(x))
+                    if delta>0:
+                        line = sm.linear_transform(x=x, y=y)
+                        data.loc[indices, yfield] = data.loc[indices, xfield].apply(lambda x: line.value(x))
+                    else:
+                        line=sm.mean_approach(q,p)
+                        data.loc[indices, yfield] = data.loc[indices, xfield].apply(lambda x: line(x))
                 else:
                     data.loc[indices, yfield] = data.loc[b, yfield]
         i = i + 1
