@@ -63,39 +63,6 @@ def get_unical_repairs(data, dfield='repair_date',lfield='repair_length',afield=
         return values
     return repairs
 
-def get_raw_repairs_v1(data, scale=0,values=False, rdfield='Дата окончания ремонта',
-               rxfield='Адрес от начала участка_1',rlfield='Длина ремонтируемого участка',
-               bdfield='Дата ремонта до аварии',bxfield='Адрес ремонта до аварии',blfield='Длина ремонта до аварии'):
-    group1 = data[rdfield].value_counts().keys()
-    group2 = data[bdfield].value_counts().keys()
-    repairs = set()
-
-    for rep in group1:
-        # print(rep)
-        repgroup = data[data[rdfield] == rep]
-        for place in repgroup[rxfield].value_counts().keys():
-            placegroup = repgroup[repgroup[rxfield] == place]
-            for length in placegroup[rlfield].value_counts().keys():
-                if length >= scale:
-                    repair = (rep, place, length)
-                    repairs.add(repair)
-    for rep in group2:
-        repgroup = data[data[bdfield] == rep]
-        for place in repgroup[bxfield].value_counts().keys():
-            placegroup = repgroup[repgroup[bxfield] == place]
-            for length in placegroup[blfield].value_counts().keys():
-                if length >= scale:
-                    repair = (rep, place, length)
-                    repairs.add(repair)
-
-    repairs = pd.DataFrame(list(repairs), columns=['Дата ремонта', 'Адрес', 'Длина']).sort_values(by='Дата ремонта').reset_index(drop=True)
-    repairs['Дата ремонта'] = pd.to_datetime(repairs['Дата ремонта'])
-    if values:
-        repairs['b'] = repairs['Адрес'] + repairs['Длина']
-        values = repairs[['Адрес', 'b', 'Дата ремонта']].values
-        return values
-    return repairs
-
 def get_raw_repairs(data, scale=0,values=False, rdfield='Дата окончания ремонта',
                rxfield='Адрес от начала участка_1',rlfield='Длина ремонтируемого участка',
                bdfield='Дата ремонта до аварии',bxfield='Адрес ремонта до аварии',blfield='Длина ремонта до аварии'):
@@ -368,16 +335,32 @@ def inscribing(data,*args,afield ='Наработка до отказа',xfield 
     data['new_id'] = data[by].astype('str')
 
     grouped = data.groupby(by).groups
+    #import time
+    #t1 = time.perf_counter()
+
+    #t2 = time.perf_counter()
+    #columns=['ID','la','wtp','clustering','repairing','splitting']
+    #out=[]
     for group in grouped:
         index=grouped[group]
+        #t1 = time.perf_counter()
         length_approach(data,index,yfield=xfield,xfield=lfield)
+        #t2 = time.perf_counter()
         wtp_approach(data,index,xfield=afield,yfield=wfield)
+        #t3 = time.perf_counter()
         set_clusters(data,index,epsilon=cluster['epsilon'],r=cluster['r'],length=cluster['length'],xfield=xfield,afield=afield,lfield=lfield)
+        #t4 = time.perf_counter()
         set_repairs_by_clustering(data,index,delta=repairs['delta'],afield=afield,xfield=xfield,dfield=dfield)
+        #t5 = time.perf_counter()
         get_splited_by_repairs(data,index,ID=group,delta=split['delta'],xfield=xfield,dfield=dfield,efield=efield,stfield=stfield,outfield=outfield)
+        #t6 = time.perf_counter()
+        #out.append((group,t2-t1,t3-t2,t4-t3,t5-t4,t6-t5))
+
+
     data['L,м']=data['b']-data['a']
     data['Адрес от начала участка (new)']=data[xfield]-data['a']
     data['Наработка до отказа(new), лет']=(data[dfield]-data[efield])/np.timedelta64(1,'Y')
+    #return pd.DataFrame(data=out,columns=columns)
 
 
 def set_repairs_by_clustering(data=pd.DataFrame([]),index=np.array([],dtype=np.int32), delta=1,afield ='Наработка до отказа',xfield ='Адрес от начала участка',dfield='Дата аварии'):
@@ -507,3 +490,254 @@ def length_approach(data=pd.DataFrame([]), index=np.array([],dtype=np.int32),xfi
     amax=data.loc[index,yfield].max()
     if amax>L:
         data.loc[index,xfield]=amax
+
+def get_binary(xdata, ident='new_id', expand=False, ints=[100], date=[1], steps=15, epsilon=1/12.,
+                   columns=['Наработка до отказа(new), лет', 'Адрес от начала участка (new)',
+                            'Обводненность', 'getout','L,м', 'S','new_id','Дата аварии','index','to_out']):
+
+    def get_interval(teta, k, current_point, lenght, expand=True, intervals=np.array([]).reshape(-1, 2)):
+        # if current_point>lenght: return None
+        teta = np.abs(teta)
+        k = np.abs(k)
+        a = current_point - k * teta
+        b = current_point + k * teta
+        if (a < 0) & (b > lenght):
+            a = 0
+            b = lenght
+        if expand:
+            if (a < 0) & (b <= lenght):
+                b = b - a
+                a = 0
+                if b > lenght:
+                    b = lenght
+            if (a >= 0) & (b > lenght):
+                a = a - (b - lenght)
+                b = lenght
+                if a < 0:
+                    a = 0
+        else:
+            if (a < 0) & (b <= lenght):
+                a = 0
+                b = b
+            if (a >= 0) & (b > lenght):
+                a = a
+                b = lenght
+        # print(a,' ',b)
+        if intervals.shape[0] > 0:
+            for i in np.arange(intervals.shape[0]):
+                x = intervals[i, 0]
+                y = intervals[i, 1]
+
+                mask1 = x <= a <= y
+                mask2 = x <= b <= y
+                if mask1 & mask2:
+                    a = current_point
+                    b = a
+                    return a, b
+                if mask1:
+                    a = y
+                if mask2:
+                    b = x
+
+        return a, b
+
+    def get_identity(data, date=1, a=0, b=1,index=-1,interval=100,steps=15,epsilon=1/12.):
+
+        types=dict(names=['new_id','index','period','shape', 'Дата аварии', 'L,м', 'a', 'b', 'target', 'count','next','delta_next','delta',
+                                     'ads','ads05','ads1','ads2','ads3','ivl0','ivl1','ivl2','ivl3','ivl4','ivl5','nivl0','nivl1','nivl2','nivl3','nivl4','nivl5','wmean','amean','percent','tau','interval','water','x','s','to_out'],
+                              formats=['U25',np.int32,np.int8,np.int32, 'datetime64[s]', np.float, np.float, np.float, np.float, np.float,
+                                       np.float,np.float, np.float, np.float, np.float, np.float,np.float,np.float,np.float,np.float,np.float,np.float,
+                                       np.float,np.float,np.float,np.float,np.float,np.float,np.float,np.float,np.float,np.float,np.float,np.float,np.float,np.float,np.float,np.float,np.float])
+
+        def sparse(rs=np.array([]), epsilon=0.1):
+            l = []
+            # x0=rs[0]
+            prev = rs[0]
+            x = None
+            a = prev + epsilon
+            l.append(prev)
+            i = 1
+            while i < rs.shape[0]:
+                x = rs[i]
+                if x > a:
+                    t = rs[i]
+                    a = x + epsilon
+                    if t != prev:
+                        prev = t
+                        l.append(t)
+                i = i + 1
+            if (x is not None) & ~(x == np.array(l[-1])):
+                l.append(x)
+            return np.array(l)
+
+        def get_horizontal_counts(data=np.array([]), interval=100, L=100):
+            mask = np.ones(data.shape[0], dtype=bool)
+            intervals = []
+            i = 0
+            while mask.shape[0] > 0:
+                y = data[-1]
+                a = y - interval
+                b = y + interval
+                if a < 0:
+                    a = 0
+                if b > L:
+                    b = L
+                res = np.array([a, b])
+                if i == 0:
+                    intervals.append((0, 0, 0))
+                    i = i + 1
+                for ivl in intervals:
+                    if res.shape[0] > 0:
+                        res = sm.residual(res, ivl, shape=2).reshape(-1)
+                if res.shape[0] > 0:
+                    submask = (data >= res[0]) & (data <= res[1])
+                    res = np.append(res, submask[submask == True].shape[0])
+                    intervals.append(res)
+                    data = data[~submask]
+                    mask = mask[~submask]
+                else:
+                    mask[-1] = False
+                    data = data[mask]
+                    mask = mask[mask]
+            return np.array(intervals[1:])
+
+        columns = np.arange(steps)
+        columns = [str(x) for x in columns]
+        for c in columns:
+            types['names'].append(c)
+            types['formats'].append(np.float)
+        dtype = np.dtype(types)
+        identity = np.empty(shape=(1), dtype=dtype)
+        step=dict({'ads05':0.5,'ads1':1.,'ads2':2.,'ads3':3.})
+        tau=data[index,0]
+        x=data[index,1]
+        out=data[index,3]
+        length=data[index,4]
+        s=data[index,5]
+        id=data[index,6]
+        adate=data[index,7]
+        i=data[index,8]
+        to_out=data[index,9]
+        identity['new_id']=id
+        identity['s'] = s
+        identity['to_out'] = to_out
+        identity['tau'] = tau
+        identity['interval'] = interval
+        identity['index'] = i
+        identity['period'] = date
+        identity['Дата аварии'] = adate
+        identity['water']=data[index, 2]
+        identity['L,м'] = length
+        identity['a']=a
+        identity['b'] = b
+        identity['x'] = x
+        #print(i,index)
+
+        mask=data[:,0]<=tau
+        identity['shape'] = mask[mask==True].shape[0]
+        mask1=(data[:,1]>=a)&(data[:,1]<=b)
+        xmask=mask1&mask
+        ads=xmask[xmask==True].shape[0]
+        dt=np.nan
+        prev=0
+        if ads>1:
+            prev=data[xmask, 0][-2]
+
+        dt = tau - prev
+        identity['delta'] = dt
+        identity['ads']=ads
+
+
+        sparsed=sparse(data[:,0][xmask],epsilon=epsilon)[-steps:]
+        for t in np.arange(1,steps+1):
+            if -t>=-sparsed.shape[0]:
+                identity[columns[-t]]=sparsed[-t]
+            else:
+                identity[columns[-t]] = 0
+
+        for k in step.keys():
+            #dlt=tau-step[k]
+            substep=data[:,0]>=tau-step[k]
+            smask=substep&xmask
+            identity[k]=smask[smask==True].shape[0]
+        ivls = get_horizontal_counts(data[:, 1][mask], interval=interval, L=length)
+        res = ivls[:, 1] - ivls[:, 0]
+        identity['percent']  = res.sum() / length
+        w_mean = data[:, 2][mask].mean()
+        a_mean = data[:, 0][mask].mean()
+        identity['wmean']=w_mean
+        identity['amean']=a_mean
+        ivl_counts = ivls[:, 2].astype(int)
+        for ii in np.arange(6):
+            if ii == 5:
+                mask3 = ivl_counts >= ii + 1
+                mask4 = ivl_counts >= 0
+            else:
+                mask3 = ivl_counts == ii + 1
+                mask4 = ivl_counts <= ii + 1
+            identity['ivl'+str(ii)] = mask3[mask3 == True].shape[0]
+            identity['nivl'+str(ii)] = mask4[mask4 == True].shape[0]
+        tmask=mask1&(~mask)
+        top=tau+date
+        mask2=data[:,0]<=top
+        ymask=tmask&mask2
+        target=np.nan
+        next=np.nan
+        delta=np.nan
+
+        identity['next']=next
+        identity['delta_next']=delta
+        dic={0:8./12.,1:7./12.,2:5./12.,3:4./12.,4:3./12.,5:3./12,6:2./12.,7:2./12.,}
+        count = ymask[ymask == True].shape[0]
+        if count>0:
+
+            arange = np.arange(tmask.shape[0])
+            inext = arange[tmask][0]
+            next = data[inext, 0]
+            delta = next - tau
+            identity['next'] = next
+            identity['delta_next'] = delta
+
+        if top<=out:
+            if count>0:
+                target=1
+            else:
+                target=0
+        else:
+            if count>0:
+                target=1
+            else:
+                target=np.nan
+                count=np.nan
+
+        identity['target']=target
+        identity['count']=count
+        return identity,data[:,0][xmask].astype(float)
+        #return identity, sparsed
+
+    tilde=0
+    xdata.sort_values(by='Наработка до отказа(new), лет', inplace=True)
+    aggdata = xdata.groupby(ident)
+    npints = np.array(ints) * 2
+    L = []
+    for i, group in enumerate(aggdata):
+        length = group[1]['L,м'].iloc[0]
+        mask = npints <= length
+        n = mask[mask == True].shape[0]
+        data = group[1][columns].values
+
+        if n > 0:
+            for j in np.arange(-data.shape[0], 0):
+                x = data[j, 1]
+                for teta in ints:
+                    if teta * 2 <= length:
+                        for d in date:
+                            a, b = get_interval(teta, 1, x, length, expand=expand)
+                            bounds = np.array([a, b])
+                            tensor,time = get_identity(data, date=d, a=bounds[0], b=bounds[1], index=j,interval=teta,epsilon=epsilon,steps=steps)
+                            if tensor is not None:
+                                L.append((tensor,time))
+                            else:
+                                print('empty id', group[0])
+
+    return np.array(L)
