@@ -1022,7 +1022,7 @@ def get_horizontal_counts(data=np.array([]),interval=100,L=100):
     return np.array(intervals[1:])
 
 
-def wtp_approach(data, mask, xfield='Наработка до отказа', yfield='Обводненность'):
+def wtp_approach_v1(data, mask, xfield='Наработка до отказа', yfield='Обводненность'):
     #mask =data['Обводненность']==0 & data['ID простого участка']==ID
     if (mask[mask == True].shape[0] == 0) | (mask[mask == True].shape[0] == mask.shape[0]):
         return
@@ -2398,6 +2398,7 @@ def GetUnicalRepairs(data, scale=0,values=False):
         values = repairs[['Адрес', 'b', 'Дата ремонта']].values
         return values
     return repairs
+
 def get_unical_repairs(data, dfield='repair_date',lfield='repair_lenght',afield='repair_adress', scale=0,values=False):
     group = data[dfield].value_counts().keys()
     repairs = set()
@@ -3428,6 +3429,71 @@ def GetSplitedByRepairs(data, ID):
         group = group[~mask]
     return data
 
+
+
+
+
+def set_repairs_by_clustering(data, delta=1):
+
+    def get_cluster_shape(cluster):
+        xmin = cluster['Адрес от начала участка'].min()
+        xmax = cluster['Адрес от начала участка'].max()
+        ymin = cluster['Наработка до отказа'].min()
+        ymax = cluster['Наработка до отказа'].max()
+        dmin = cluster['Дата аварии'].min()
+        dmax = cluster['Дата аварии'].max()
+        return (xmin, xmax), (ymin, ymax), (dmin, dmax)
+
+    def get_cluster_interseption(cluster, data):
+        x, y, d = get_cluster_shape(cluster)
+        mask = (data["Адрес от начала участка"] >= x[0]) & (data["Адрес от начала участка"] <= x[1]) & (
+                    data["Наработка до отказа"] > y[1])
+        interseptions = data[mask]['cluster'].value_counts().keys()
+        return interseptions
+
+    data['repair_date'] = np.nan
+    data['repair_lenght'] = np.nan
+    data['repair_adress'] = np.nan
+    data['repair_index'] = np.nan
+    data['comment'] = np.nan
+    agg_data = data.groupby('ID простого участка')
+    for group in agg_data:
+        #ID = group[0]
+        pipe = group[1]
+        mask = pipe['cluster'] == -1
+        alones = pipe[mask]
+        tilde = 0
+        for c in pipe[~mask]['cluster'].value_counts().keys():
+            cluster = pipe[pipe['cluster'] == c]
+            x, y, d = get_cluster_shape(cluster)
+            rd = d[1]
+            rl = x[1] - x[0]
+            if rl < 2:
+                rl = 2
+            addr = x[0]
+            interseption = get_cluster_interseption(cluster, pipe[~mask])
+            comment = 0
+            if len(interseption) > 0:
+                for i in interseption:
+                    top = pipe[pipe['cluster'] == i]
+                    q, p, w = get_cluster_shape(top)
+                    if p[0] - y[1] <= delta:
+                        comment = 1
+                        break
+            else:
+                comment = 0
+            alone = alones[(
+                        (alones["Адрес от начала участка"] >= x[0]) & (alones["Адрес от начала участка"] <= x[1]) & (
+                            alones["Наработка до отказа"] < y[0]))]
+            data.loc[cluster.index, ['repair_date', 'repair_adress', 'repair_lenght', 'comment', 'repair_index']] = [rd,addr,rl,comment,tilde]
+
+            if alone.shape[0] > 0:
+                data.loc[alone.index, ['repair_date', 'repair_adress', 'repair_lenght', 'comment', 'repair_index']] = [rd, addr, rl, comment, tilde]
+
+            tilde = tilde + 1
+
+    return data
+
 def get_splited_by_repairs(data, ID,delta=3):
     group = data[data['ID простого участка'] == ID]
     synthetic = get_unical_repairs(group)
@@ -3490,6 +3556,7 @@ def get_splited_by_repairs(data, ID,delta=3):
             data.loc[indexes1, 'Дата перевода в бездействие'] = rd
             #data.loc[indexes1, 'Состояние'] = 'Бездействующий'
     return data
+
 def SplitByRepairs(cdata,save_to='Отказы после ремонта_v7',path='D:\\ml\\'):
     cdata['a'] = 0
     cdata['b'] = cdata['L']
@@ -7197,6 +7264,145 @@ class Generator_v2:
         x[self.col['nivl0']:self.col['nivl5'] + 1]=np.cumsum(arr)
 
         return q
+
+#Группа методов обработки результатов прогнозирования: start
+
+def get_jd_counts(data):
+    columns = ['new_id', 'L', 'D', 'interval', 'prevent', 'lost', 'length']
+    frame = []
+    aggdata = data.groupby('new_id')
+    for i, groups in enumerate(aggdata):
+        group = groups[1]
+        # raw=cdata[cdata['new_id']==groups[0]]
+        # print(group.shape)
+        # print(group['interval'].value_counts().keys())
+        for interval in group['interval'].value_counts().keys():
+            subgroup = group[group['interval'] == interval]
+            array = []
+            array.append(groups[0])
+            # array.append(groups[0])
+            array.append(subgroup['L,м'].iloc[0])
+            array.append(subgroup['D'].iloc[0])
+            array.append(interval)
+            array.append(subgroup['prevent'].sum())
+            array.append(subgroup['lost'].sum())
+
+            lenght = 0
+            for j in subgroup['interseption'].value_counts().keys():
+                interseption = subgroup[subgroup['interseption'] == j]
+                lenght = lenght + interseption.iloc[0]['joined_length']
+            array.append(lenght)
+            frame.append(array)
+    return pd.DataFrame(data=frame, columns=columns)
+    # mask=pd.Series(index=raw.index,data=np.ones(raw.shape[0],dtype=bool))
+    # mask=forward(data,raw,mask=mask,indices=subgroup.index)
+    # mask=backward(data,raw,mask=mask,indices=subgroup.index
+
+
+def set_fb(data, cdata):
+    aggdata = data.groupby('new_id')
+    for i, groups in enumerate(aggdata):
+        group = groups[1]
+        raw = cdata[cdata['new_id'] == groups[0]]
+        # print(group.shape)
+        # print(group['interval'].value_counts().keys())
+        for interval in group['interval'].value_counts().keys():
+            subgroup = group[group['interval'] == interval]
+            mask = pd.Series(index=raw.index, data=np.ones(raw.shape[0], dtype=bool))
+            mask = forward(data, raw, mask=mask, indices=subgroup.index)
+            mask = backward(data, raw, mask=mask, indices=subgroup.index)
+
+
+def set_reverse(data=pd.DataFrame([])):
+    aggdata = data.groupby('new_id')
+    for i, groups in enumerate(aggdata):
+        group = groups[1]
+        # raw=cdata[cdata['new_id']==groups[0]]
+        # print(group.shape)
+        # print(group['interval'].value_counts().keys())
+        for interval in group['interval'].value_counts().keys():
+            subgroup = group[group['interval'] == interval]
+            indices = subgroup.index
+            reverse(data, indices=indices)
+
+
+def reverse(data, indices=np.array([], dtype=int)):
+    group = data.loc[indices]
+    j = -1
+    while j >= -indices.shape[0]:
+        i = indices[j]
+        j = j - 1
+        if data.loc[i, 'base'] == True:
+            a = group.loc[i, 'lbound']
+            b = group.loc[i, 'rbound']
+            date = group.loc[i, 'Дата аварии']
+            mask1 = (group['addres'] >= a) & (group['addres'] <= b)
+            mask2 = group['Дата аварии'] < date
+            # data.loc[i,'base']=True
+            mask3 = mask1 & mask2
+            index = mask3[mask3 == True].index
+            data.loc[index, 'base'] = False
+
+
+def forward(data, cdata, mask=pd.Series(data=np.array([], dtype=bool)), indices=np.array([], dtype=int)):
+    for i in indices:
+        if data.loc[i, 'prediction'] == 1:
+            a = data.loc[i, 'lbound']
+            b = data.loc[i, 'rbound']
+            f, pr, pr_y, msk = get_counters(cdata, index=data.loc[i, 'oi'], a=a, b=b, mask=mask)
+            mask = msk
+            # print(mask[mask==False].shape)
+            data.loc[i, 'prevent'] = f
+    return mask
+
+
+def backward(data, cdata, mask=pd.Series(data=np.array([], dtype=bool)), indices=np.array([], dtype=int)):
+    for i in indices:
+        if data.loc[i, 'prediction'] == 0:
+            a = data.loc[i, 'lbound']
+            b = data.loc[i, 'rbound']
+            f, pr, pr_y, msk = get_counters(cdata, index=data.loc[i, 'oi'], a=a, b=b, mask=mask)
+            mask = msk
+            data.loc[i, 'lost'] = f
+    return mask
+
+
+def get_counters(group, index, date=3, year=2017, mask=pd.Series(data=np.array([], dtype=bool)), a=0, b=0):
+    # a=group.loc[index,'lbound']
+    # b=group.loc[index,'rbound']
+    mask1 = (group['Адрес от начала участка (new)'] >= a) & (group['Адрес от начала участка (new)'] <= b)
+    current = group.loc[index, 'Дата аварии']
+    date_out = group.loc[index, 'Дата перевода в бездействие']
+    current_age = group.loc[index, 'Наработка до отказа(new), лет']
+    getin = group.loc[index, 'Дата ввода']
+    get_out = (date_out - getin) / np.timedelta64(1, 'Y')
+    mask3 = group['Дата аварии'] > current
+    mask4 = group['Дата аварии'] <= current
+    mask5 = group['Дата аварии'].dt.year < year
+    fimask = mask1 & mask3
+    future_ads = group[mask1 & mask3]
+    future_ads['delta'] = (future_ads['Дата аварии'] - current) / np.timedelta64(1, 'Y')
+    previous = group[mask1 & mask4]
+    previous_y = group[mask1 & mask5]
+    previous_count = previous.shape[0]
+    previous_y_count = previous_y.shape[0]
+    # data.loc[indices,'previous_y']=previous_y.shape[0]
+    mask6 = future_ads['delta'] <= date
+    marked = mask6[mask6 == True].index
+    if get_out >= (current_age + date):
+        future_ads_y = future_ads[mask & mask6]
+        future = future_ads_y.shape[0]
+    else:
+        we_future_ads_y = future_ads[mask & mask6]
+        if we_future_ads_y.shape[0] > 0:
+            future = we_future_ads_y.shape[0]
+        else:
+            future = np.nan
+    mask.loc[marked] = False
+    return future, previous_count, previous_y_count, mask
+
+#Группа методов обработки результатов прогнозирования: end. Не удалять!
+
 #marr=np.array([[0,1,1,3,3,4],[1,2,3,3,4,4],[2,2,3,4,4,5],[1,1,2,2,3,4],[3,4,4,5,5,5]])
 #marr=np.array([[0,1,1],[1,2,3],[2,2,3],[1,1,2],[3,4,4]])
 #marr=np.array([[0,0,1,1,2,2],[0,0,0,0,1,2],[0,0,0,1,1,2],[0,0,0,2,2,3],[0,0,0,0,0,3]])

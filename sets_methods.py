@@ -141,7 +141,12 @@ class linear_transform:
         self.a1 = (self.y1+self.y2 - self.a2*(self.x1+self.x2))*0.5
 
     def value(self, x):
-        return self.a1 + self.a2 * x
+        y=self.a1 + self.a2 * x
+        return y
+
+
+
+
 
 def mean_approach(*args,**kwargs):
     k=0
@@ -155,4 +160,5 @@ def mean_approach(*args,**kwargs):
 
     def value(x=0):
         return s
+
     return value
