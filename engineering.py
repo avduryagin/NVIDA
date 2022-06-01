@@ -284,8 +284,6 @@ def inscribing(data,*args,afield ='Наработка до отказа',xfield 
     if split is None:
         split = {'delta': 3}
 
-
-
     data['repair_date'] = np.nan
     data['repair_length'] = np.nan
     data['repair_address'] = np.nan
@@ -309,34 +307,16 @@ def inscribing(data,*args,afield ='Наработка до отказа',xfield 
     # устанавливаем горизонт прогнозирования для действующих участков
     mask = data[stfield] == 'Действующий'
     data.loc[mask, outfield] = today
-
-
-
     data['new_id'] = data[by].astype('str')
-
-
     grouped = data.groupby(by).groups
-    #import time
-    #t1 = time.perf_counter()
 
-    #t2 = time.perf_counter()
-    #columns=['ID','la','wtp','clustering','repairing','splitting']
-    #out=[]
     for group in grouped:
         index=grouped[group]
-        #t1 = time.perf_counter()
         length_approach(data,index,yfield=xfield,xfield=lfield)
-        #t2 = time.perf_counter()
         wtp_approach(data,index,xfield=afield,yfield=wfield)
-        #t3 = time.perf_counter()
         set_clusters(data,index,epsilon=cluster['epsilon'],r=cluster['r'],length=cluster['length'],xfield=xfield,afield=afield,lfield=lfield)
-        #t4 = time.perf_counter()
         set_repairs_by_clustering(data,index,delta=repairs['delta'],afield=afield,xfield=xfield,dfield=dfield)
-        #t5 = time.perf_counter()
         get_splited_by_repairs(data,index,ID=group,delta=split['delta'],xfield=xfield,dfield=dfield,efield=efield,stfield=stfield,outfield=outfield)
-        #t6 = time.perf_counter()
-        #out.append((group,t2-t1,t3-t2,t4-t3,t5-t4,t6-t5))
-
 
     data['L,м']=data['b']-data['a']
     data['Адрес от начала участка (new)']=data[xfield]-data['a']
@@ -344,7 +324,6 @@ def inscribing(data,*args,afield ='Наработка до отказа',xfield 
     data['getout'] = (data['Дата перевода в бездействие'] - data['Дата ввода']) / np.timedelta64(1, 'Y')
     data['to_out'] = (data['Дата перевода в бездействие'] - data['Дата аварии']) / np.timedelta64(1, 'Y')
     data['index']=data.index
-    #return pd.DataFrame(data=out,columns=columns)
 
 
 def set_repairs_by_clustering(data=pd.DataFrame([]),index=np.array([],dtype=np.int32), delta=1,afield ='Наработка до отказа',xfield ='Адрес от начала участка',dfield='Дата аварии'):
@@ -507,8 +486,6 @@ class features:
         self.reg_features = [str(x) for x in np.arange(self.steps)]
         data=self.get_binary(self.raw,self.columns,date=self.date, ident=self.ident,expand=self.expand,ints=self.ints,steps=self.steps,epsilon=self.epsilon,mode=mode)
         self.data=np.vstack(data[:,0])
-        #self.cl=self.data[self.cl_features].view(dtype=np.float32)
-        #self.reg = self.data[self.reg_features].view(dtype=np.float32)
         self.cl=rfn.structured_to_unstructured(self.data[self.cl_features],dtype=np.float32).reshape(-1,len(self.cl_features))
         self.reg = rfn.structured_to_unstructured(self.data[self.reg_features], dtype=np.float32).reshape(-1,len(self.reg_features))
         self.time_series = data[:, 1]
@@ -531,9 +508,6 @@ class features:
 
     def get_binary(self,xdata,columns,ident='new_id', expand=False, ints=np.array([100]), date=np.array([3]), steps=15, epsilon=1/12.,mode='reverse'):
         #mode - тип индексации
-
-
-
         def get_identity(data, date=1, a=0, b=1, index=-1, interval=100, steps=15, epsilon=1/12.):
 
             types = dict(
@@ -727,32 +701,15 @@ class features:
             data = group[1][columns].values
 
             if n > 0:
-                #for j in np.arange(-data.shape[0], 0):
-                    #x = data[j, 1]
-                    #for teta in ints:
-                        #if teta * 2 <= length:
-                            #for d in date:
-                                #a, b = self.get_interval(teta=teta, k=1, current_point=x, rbound=length, expand=expand)
-                                #bounds = np.array([a, b])
-                                #tensor, time = get_identity(data, date=d, a=bounds[0], b=bounds[1], index=j,
-                                                            #interval=teta, epsilon=epsilon, steps=steps)
-                                #if tensor is not None:
-                                    #L.append((tensor, time))
-                                #else:
-                                    #print('empty id', group[0])
-
 
                 for teta in ints:
                     if teta * 2 <= length:
-                        #index=self.get_index(data,kind=kind,size=teta,length=length)
                         val=self.cover(data,mode=mode,length=length,size=teta,c0=1,c1=0)
                         for v in val:
                             j=int(v[0])
                             a=v[1]
                             b=v[2]
                             for d in date:
-                                #a, b = self.get_interval(teta=teta, k=1, current_point=x, rbound=length, expand=expand)
-                                #bounds = np.array([a, b])
                                 tensor, time = get_identity(data, date=d, a=a, b=b, index=j,
                                                             interval=teta, epsilon=epsilon, steps=steps)
                                 if tensor is not None:

@@ -1,5 +1,6 @@
 import numpy as np
-import pandas as pd
+import os
+#import pandas as pd
 #import joblib
 import pickle
 
@@ -22,24 +23,23 @@ class ClRe:
         else:
             return None
 class Generator:
-    def __init__(self, classifier=None, regressor=None, col=None,path='D:\\ml\\models\\sklearn\\settings\\'):
+    def __init__(self, classifier=None, regressor=None, col=None,path=None,modelfolder='models',regmodel='rfreg.sav',clmodel='rfc.sav',colfile='col.npy'):
+        if path is None:
+            path=os.path.join(os.getcwd(),modelfolder)
         if regressor is not None:
             self.regressor=regressor
         else:
-            self.regressor=pickle.load(open(path+'rfreg.sav', 'rb'))
+            self.regressor=pickle.load(open(os.path.join(path,regmodel), 'rb'))
         if classifier is not None:
             self.classifier=classifier
         else:
-            self.classifier = pickle.load(open(path + 'rfc.sav', 'rb'))
+            self.classifier = pickle.load(open(os.path.join(path,clmodel), 'rb'))
 
         if col is not None:
             self.col=col
         else:
-            self.col = np.load(path + 'col.npy',allow_pickle=True)[()]
+            self.col = np.load(os.path.join(path,colfile),allow_pickle=True)[()]
 
-        #self.classifier = classifier
-        #self.regressor = regressor
-        #self.col = col
         self.x = ClRe(c=np.array([]), r=np.array([]))
         self.gindices = np.array([], dtype=int)
         self.mask = np.array([], dtype=bool)
