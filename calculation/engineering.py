@@ -1,11 +1,10 @@
 import numpy as np
 import pandas as pd
-import sets_methods as sm
 from sklearn.cluster import DBSCAN
 from sklearn.preprocessing import MinMaxScaler
 from numpy.lib import recfunctions as rfn
-import metrics
-import generator as gen
+from calculation import generator as gen, sets_methods as sm, metrics
+
 
 class repairs_map:
     def __init__(self):

@@ -24,8 +24,10 @@ class ClRe:
             return None
 class Generator:
     def __init__(self, classifier=None, regressor=None, col=None,path=None,modelfolder='models',regmodel='rfreg.sav',clmodel='rfc.sav',colfile='col.npy'):
+        #print('path ',os.path.dirname(os.path.abspath(__file__)))
         if path is None:
-            path=os.path.join(os.getcwd(),modelfolder)
+            path=os.path.join(os.path.dirname(os.path.abspath(__file__)),modelfolder)
+            #path=os.path.join(os.getcwd(),modelfolder)
         if regressor is not None:
             self.regressor=regressor
         else:

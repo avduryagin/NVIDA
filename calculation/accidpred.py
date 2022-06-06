@@ -1,5 +1,4 @@
-import engineering as en
-import generator as gn
+from calculation import engineering as en, generator as gn
 import pandas as pd
 import numpy as np
 from numpy.lib import recfunctions as rfn
@@ -62,9 +61,10 @@ def predict(json,*args,**kwargs):
     data=pd.read_json(json,orient='split',dtype=dtype)
     data.rename(columns=to_rename,inplace=True)
     model=predictor()
-    model.fit(data,mode='bw')
-    model.predict()
-    model.fill()
+    if data.shape[0]>0:
+        model.fit(data,mode='bw')
+        model.predict()
+        model.fill()
     return model.json
 
 
