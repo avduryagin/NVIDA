@@ -9,11 +9,14 @@ class hh_request():
         self.headers={'user-agent': 'Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.80 Safari/537.36',
          'authority': 'spb.hh.ru','method': 'POST','path': '/account/login?backurl=%2F','accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3',
          'accept-encoding': 'gzip, deflate, br','content-type': 'application/x-www-form-urlencoded'}
-        self.values={'username': '79633440605','password': 'nabukh0d0n0s0r','backUrl': 'https://spb.hh.ru/','remember': 'yes','action': 'Войти','_xsrf': 'xsrf'}
+        #self.values={'username': '79633440605','password': 'nabukh0d0n0s0r','backUrl': 'https://spb.hh.ru/','remember': 'yes','action': 'Войти','_xsrf': 'xsrf'}
+        self.values = {'username': 'shaytay@mail.ru', 'password': '6791-dimoN', 'backUrl': 'https://spb.hh.ru/',
+                       'remember': 'yes', 'action': 'Войти', '_xsrf': 'xsrf'}
         self.url='https://spb.hh.ru/account/login?backurl=%2F'
         self.token=None
         self.session=None
-        self.cv_id={'math':'b6f94738ff042595420039ed1f697336795442','project_manager':'25ab77c5ff033a6eba0039ed1f6752534d5541'}
+        #self.cv_id={'math':'b6f94738ff042595420039ed1f697336795442','project_manager':'25ab77c5ff033a6eba0039ed1f6752534d5541'}
+        self.cv_id = {'project_manager': '2ccebf75ff0902aafc0039ed1f5a7157485568'}
         self.step=14401
     def auth(self):
         self.session=requests.Session()
