@@ -1,11 +1,10 @@
 import numpy as np
 import pandas as pd
-import sets_methods as sm
 from sklearn.cluster import DBSCAN
 from sklearn.preprocessing import MinMaxScaler
 from numpy.lib import recfunctions as rfn
-import metrics
-import generator as gen
+from calculation import generator as gen, sets_methods as sm, metrics
+
 
 class repairs_map:
     def __init__(self):
@@ -284,14 +283,14 @@ def inscribing(data,*args,afield ='Наработка до отказа',xfield 
     if split is None:
         split = {'delta': 3}
 
-    data['repair_date'] = np.nan
-    data['repair_length'] = np.nan
-    data['repair_address'] = np.nan
-    data['repair_index'] = np.nan
-    data['comment'] = np.nan
-    data['cluster']=np.nan
-    data['a'] = np.nan
-    data['b'] = np.nan
+    data.loc[:,'repair_date'] = np.nan
+    data.loc[:,'repair_length'] = np.nan
+    data.loc[:,'repair_address'] = np.nan
+    data.loc[:,'repair_index'] = np.nan
+    data.loc[:,'comment'] = np.nan
+    data.loc[:,'cluster']=np.nan
+    data.loc[:,'a'] = np.nan
+    data.loc[:,'b'] = np.nan
 
 
     for arg in args:
@@ -307,7 +306,7 @@ def inscribing(data,*args,afield ='Наработка до отказа',xfield 
     # устанавливаем горизонт прогнозирования для действующих участков
     mask = data[stfield] == 'Действующий'
     data.loc[mask, outfield] = today
-    data['new_id'] = data[by].astype('str')
+    data.loc[:,'new_id'] = data[by].astype('str')
     grouped = data.groupby(by).groups
 
     for group in grouped:
@@ -318,12 +317,12 @@ def inscribing(data,*args,afield ='Наработка до отказа',xfield 
         set_repairs_by_clustering(data,index,delta=repairs['delta'],afield=afield,xfield=xfield,dfield=dfield)
         get_splited_by_repairs(data,index,ID=group,delta=split['delta'],xfield=xfield,dfield=dfield,efield=efield,stfield=stfield,outfield=outfield)
 
-    data['L,м']=data['b']-data['a']
-    data['Адрес от начала участка (new)']=data[xfield]-data['a']
-    data['Наработка до отказа(new), лет']=(data[dfield]-data[efield])/np.timedelta64(1,'Y')
-    data['getout'] = (data['Дата перевода в бездействие'] - data['Дата ввода']) / np.timedelta64(1, 'Y')
-    data['to_out'] = (data['Дата перевода в бездействие'] - data['Дата аварии']) / np.timedelta64(1, 'Y')
-    data['index']=data.index
+    data.loc[:,'L,м']=data['b']-data['a']
+    data.loc[:,'Адрес от начала участка (new)']=data[xfield]-data['a']
+    data.loc[:,'Наработка до отказа(new), лет']=(data[dfield]-data[efield])/np.timedelta64(1,'Y')
+    data.loc[:,'getout'] = (data['Дата перевода в бездействие'] - data['Дата ввода']) / np.timedelta64(1, 'Y')
+    data.loc[:,'to_out'] = (data['Дата перевода в бездействие'] - data['Дата аварии']) / np.timedelta64(1, 'Y')
+    data.loc[:,'index']=data.index
 
 
 def set_repairs_by_clustering(data=pd.DataFrame([]),index=np.array([],dtype=np.int32), delta=1,afield ='Наработка до отказа',xfield ='Адрес от начала участка',dfield='Дата аварии'):
